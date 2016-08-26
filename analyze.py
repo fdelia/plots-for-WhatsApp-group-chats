@@ -10,6 +10,14 @@ def add(d, key, nr=1):
 		d[key] += nr
 
 
+def countBrackets(text):
+	text2 = text.replace(':)', '').replace(';)', '').replace(':-)', '')
+	if (text2.count(')') > 0):
+		print text2
+	add(closedBracketsCount, user, text2.count(')'))
+	add(openBracketsCount, user, text2.count('('))
+
+
 with open("_chat.txt") as f:
     content = f.readlines()
 
@@ -17,7 +25,10 @@ userCount = {}
 wordCount = {}
 hourCount = {}
 imageCount = {}
+closedBracketsCount = {}
+openBracketsCount = {}
 user = None
+totalWordCount = 0
 for line in content:
 	parts = line.split(':', 4)
 
@@ -27,8 +38,12 @@ for line in content:
 	# add to the predecessor, happens with newlines, is still the same user
 	if len(parts) == 1 and parts[0] == '\n': continue
 	if len(parts) < 5:
-		words = len(' '.join(parts).split(' '))
+		text = ' '.join(parts)
+		words = len(text.split(' '))
 		add(wordCount, user, words)
+		totalWordCount += words
+
+		countBrackets(text)
 		continue
 
 	(date_hour, minute, second, user, text) = parts
@@ -37,7 +52,8 @@ for line in content:
 	hour = int(hour)
 
 	user = user.decode('unicode_escape').encode('ascii', 'ignore')
-	user = re.sub(' M$', '', user).strip()
+	user = re.sub(' M$', '', user)
+	user = user.strip()
 
 
 	if "<image omitted>\r\n" in text:
@@ -47,14 +63,24 @@ for line in content:
 	add(userCount, user)
 	add(hourCount, hour)
 	add(wordCount, user, words)
+	totalWordCount += words
+
+	countBrackets(text)
 
 
+
+
+print ("total word count: " + str(totalWordCount))
+print(closedBracketsCount)
+print(openBracketsCount)
 
 # sort by values
 userCountCopy = userCount
 userCount = sorted(userCount.iteritems(), key=lambda(k, v): (v, k), reverse=True)
 wordCount = sorted(wordCount.iteritems(), key=lambda(k, v): (v, k), reverse=True)
 imageCount = sorted(imageCount.iteritems(), key=lambda(k, v): (v, k), reverse=True)
+openBracketsCount = sorted(openBracketsCount.iteritems(), key=lambda(k, v): (v, k), reverse=True)
+# closedBracketsCount = sorted(closedBracketsCount.iteritems(), key=lambda(k, v): (v, k), reverse=True)
 # sort by keys
 # hourCount = sorted(hourCount.iteritems())
 
@@ -73,7 +99,6 @@ ax.set_xlabel("user")
 ax.set_ylabel("# of messages")
 ax.set_xticklabels(x_labels)
 
-rects = ax.patches
 plt.gcf().subplots_adjust(bottom=0.25)
 plt.savefig("_nr_of_messages.png")
 
@@ -96,7 +121,6 @@ ax.set_xlabel("user")
 ax.set_ylabel("# of words")
 ax.set_xticklabels(x_labels)
 
-rects = ax.patches
 plt.gcf().subplots_adjust(bottom=0.25)
 plt.savefig("_nr_of_words_per_msg.png")
 
@@ -120,7 +144,6 @@ ax.set_xlabel("hour")
 ax.set_ylabel("# of messages")
 ax.set_xticklabels(x_labels)
 
-rects = ax.patches
 plt.gcf().subplots_adjust(bottom=0.25)
 plt.savefig("_activity_per_hour.png")
 
@@ -139,8 +162,31 @@ ax.set_xlabel("user")
 ax.set_ylabel("# of images")
 ax.set_xticklabels(x_labels)
 
-rects = ax.patches
 plt.gcf().subplots_adjust(bottom=0.25)
 plt.savefig("_images_shared.png")
+
+
+
+##### BRACKETS #####
+users = [user for (user, count) in openBracketsCount if count > 0]
+counts = [count for (user, count) in openBracketsCount if count > 0]
+counts2 = []
+for user in users:
+	counts2.append(closedBracketsCount[user])
+
+freq_series = pd.Series.from_array(counts) 
+freq_series2 = pd.Series.from_array(counts2)
+x_labels = users
+
+plt.figure(figsize=(12, 9))
+ax = freq_series.plot(kind='bar', color='blue', alpha=0.8, position=1, width=0.3)
+freq_series2.plot(kind='bar', ax=ax, color='magenta', alpha=0.5, position=0, width=0.3)
+ax.set_title("Opening / closing brackets")
+ax.set_xlabel("user")
+ax.set_ylabel("# of brackets")
+ax.set_xticklabels(x_labels)
+
+plt.gcf().subplots_adjust(bottom=0.25)
+plt.savefig("_brackets.png")
 
 
