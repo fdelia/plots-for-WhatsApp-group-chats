@@ -1,7 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import pandas as pd
 import re
+from collections import OrderedDict
+from datetime import datetime
+
 
 
 # These are the "Tableau 20" colors as RGB.    
@@ -58,6 +62,9 @@ with open("_chat.txt") as f:
 
 
 userCount = {}
+userDateCount = {}
+dateCount = OrderedDict()
+dateOrder = []
 wordCount = {}
 singlewordCount = {}
 hourCount = {}
@@ -87,7 +94,7 @@ for line in content:
 	hour = int(hour)
 
 	user = user.decode('unicode_escape').encode('ascii', 'ignore')
-	user = re.sub(' M$', '', user)
+	user = re.sub(' M$', '', user) # since Fabio uses ' M' in names
 	user = user.strip()
 
 
@@ -100,6 +107,9 @@ for line in content:
 	add(userCount, user)
 	add(hourCount, hour)
 
+	add(userDateCount, (user, date))
+	add(dateCount, date)
+	dateOrder.append(date)
 
 
 
@@ -187,6 +197,62 @@ plt.gcf().subplots_adjust(bottom=0.25)
 plt.savefig("_activity_per_hour.png", bbox_inches="tight")
 
 
+
+##### ACTIVITY OVER TIME #####
+dates = dateCount.keys()
+x = [datetime.strptime(d, '%d.%m.%y').date() for d in dates]
+y = dateCount.values()
+
+
+# add a user
+y2 = []
+y3 = []
+y4 = []
+for date in dates:
+	if ('Natalia Malyshewa', date) in userDateCount: y2.append(userDateCount[('Natalia Malyshewa', date) ])
+	else: y2.append(0)	
+
+	if ('Squeeeez', date) in userDateCount: y3.append(userDateCount[('Squeeeez', date) ])
+	else: y3.append(0)
+
+	if ('Ritish', date) in userDateCount: y4.append(userDateCount[('Ritish', date) ])
+	else: y4.append(0)	
+
+
+plt.figure(figsize=(12, 9))
+ax = plt.subplot(111)    
+
+ax.spines["top"].set_visible(False)    
+ax.spines["bottom"].set_visible(False)    
+ax.spines["right"].set_visible(False)    
+ax.spines["left"].set_visible(False)   
+ax.get_xaxis().tick_bottom()  
+ax.get_yaxis().tick_left()
+ax.set_title("Chat activity per date (total and top users)")
+ax.set_xlabel("date")
+ax.set_ylabel("# of messages")
+
+for yy in range(min(y), max(y), 100):    
+    plt.plot(x, [yy] * len(x), "--", lw=0.5, color="black", alpha=0.3)  
+
+plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%d.%m.'))
+plt.gca().xaxis.set_major_locator(mdates.DayLocator(interval=3))
+plt.gcf().autofmt_xdate()
+
+plt.plot(x, y, color=tableau20[2], alpha=1)
+plt.text(max(x), y[-1], "Total", fontsize=10, color=tableau20[2])    
+plt.plot(x, y2, color=tableau20[5], alpha=1)
+plt.text(max(x), y2[-1], "Natalia", fontsize=10, color=tableau20[5])    
+plt.plot(x, y3, color=tableau20[6], alpha=1)
+plt.text(max(x), y3[-1], "Squeeeez", fontsize=10, color=tableau20[6])    
+plt.plot(x, y4, color=tableau20[8], alpha=1)
+plt.text(max(x), y4[-1], "Ritish", fontsize=10, color=tableau20[8])    
+
+plt.gcf().subplots_adjust(bottom=0.25)
+plt.savefig("_activity_over_time.png", bbox_inches="tight")
+
+
+
 ##### IMAGES SHARED #####
 users = [user for (user, count) in imageCount if count > 0]
 counts = [count for (user, count) in imageCount if count > 0]
@@ -240,6 +306,10 @@ plt.savefig("_brackets.png", bbox_inches="tight")
 # print(' ')
 # for (word, count) in singlewordCount:
 # 	print( str(word) + " \t\t " + str(count))
+
+
+
+##### MESSAGES / USER / TIME #####
 
 
 
