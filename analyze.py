@@ -42,17 +42,23 @@ def countEmojis(text):
 	# print count
 	return count
 
-def processText(text):
+def processText(text, user):
 	global totalWordCount
 
 	words = len(text.split(' '))
 	add(wordCount, user, words)
 	totalWordCount += words
 
+	sentences = len(text.split('. '))
+	add(userSentenceCount, user, sentences)
+
 	for word in text.split(' '):
 		word = re.sub(r'[\(\)\"\.,:?]*', '', word.lower()).strip()
 		if word == '': continue
 		add(singlewordCount, word)
+
+		if user == 'Fabio': add(userSinglewordCount, word)
+		# if user == 'Natalia Malyshewa': add(userSinglewordCount, word)
 
 	countBrackets(text)
 
@@ -61,12 +67,14 @@ with open("_chat.txt") as f:
     content = f.readlines()
 
 
-userCount = {}
+userWordCount = {}
 userDateCount = {}
+userSentenceCount = {}
 dateCount = OrderedDict()
 dateOrder = []
 wordCount = {}
 singlewordCount = {}
+userSinglewordCount = {}
 hourCount = {}
 imageCount = {}
 closedBracketsCount = {}
@@ -86,7 +94,7 @@ for line in content:
 	if len(parts) == 1 and parts[0] == '\n': continue
 	if len(parts) < 5:
 		text = ' '.join(parts)
-		processText(text)
+		processText(text, user)
 		continue
 
 	(date_hour, minute, second, user, text) = parts
@@ -102,9 +110,9 @@ for line in content:
 		add(imageCount, user)
 		continue
 
-	processText(text)
+	processText(text, user)
 	
-	add(userCount, user)
+	add(userWordCount, user)
 	add(hourCount, hour)
 
 	add(userDateCount, (user, date))
@@ -117,17 +125,18 @@ for line in content:
 print ("total word count: " + str(totalWordCount))
 
 # sort by values
-userCountCopy = userCount
-userCount = sorted(userCount.iteritems(), key=lambda(k, v): (v, k), reverse=True)
+userWordCountCopy = userWordCount
+userWordCount = sorted(userWordCount.iteritems(), key=lambda(k, v): (v, k), reverse=True)
 wordCount = sorted(wordCount.iteritems(), key=lambda(k, v): (v, k), reverse=True)
 imageCount = sorted(imageCount.iteritems(), key=lambda(k, v): (v, k), reverse=True)
 openBracketsCount = sorted(openBracketsCount.iteritems(), key=lambda(k, v): (v, k), reverse=True)
 singlewordCount = sorted(singlewordCount.iteritems(), key=lambda(k, v): (v, k), reverse=True)
+userSinglewordCount = sorted(userSinglewordCount.iteritems(), key=lambda(k, v): (v, k), reverse=True)
 
 
 ##### NR OF MESSAGES #####
-users = [user for (user, count) in userCount if count > 0]
-counts = [count for (user, count) in userCount if count > 0]
+users = [user for (user, count) in userWordCount if count > 0]
+counts = [count for (user, count) in userWordCount if count > 0]
 
 freq_series = pd.Series.from_array(counts) 
 plt.figure(figsize=(12, 9))
@@ -147,8 +156,8 @@ plt.savefig("_nr_of_messages.png", bbox_inches="tight")
 
 
 ##### WORDS / MESSAGE #####
-users = [user for (user, count) in wordCount if userCountCopy[user] > 1]
-wordCount2 = [(user, count/userCountCopy[user]) for (user, count) in wordCount if userCountCopy[user] > 1]
+users = [user for (user, count) in wordCount if userWordCountCopy[user] > 1]
+wordCount2 = [(user, count/userWordCountCopy[user]) for (user, count) in wordCount if userWordCountCopy[user] > 1]
 wordCount2 = sorted(wordCount2, key=lambda tup: tup[1], reverse=True)
 
 users = [user for (user, count) in wordCount2]
@@ -205,6 +214,7 @@ y = dateCount.values()
 
 
 # add a user
+# TODO make this simpler
 y2 = []
 y3 = []
 y4 = []
@@ -309,8 +319,66 @@ plt.savefig("_brackets.png", bbox_inches="tight")
 
 
 
-##### MESSAGES / USER / TIME #####
+
+##### WORD "CLOUD" PLOT #####
+wordCountThisUser = 0
+for user, count in wordCount:
+	if user == 'Fabio':
+	# if user == 'Natalia Malyshewa':
+		wordCountThisUser = count
+		break
+
+wordsToPlot = {}
+max_y = 0
+for word, count in singlewordCount[:30]:
+	wordsToPlot[word] = {}
+	wordsToPlot[word]['y'] = float(count) / totalWordCount
+	wordsToPlot[word]['x'] = 0
+	max_y = max(max_y, float(count) / totalWordCount)
+
+max_x = 0
+for word, count in userSinglewordCount[:30]:
+	if word not in wordsToPlot:wordsToPlot[word] = {}
+	wordsToPlot[word]['x'] = float(count) / wordCountThisUser
+	max_x = max(max_x, float(count) / wordCountThisUser)
+	if 'y' not in wordsToPlot[word]: wordsToPlot[word]['y'] = 0
+
+plt.figure(figsize=(12, 12))
+for word, xy in wordsToPlot.iteritems():
+	plt.text(xy['x'], xy['y'], word, ha='center', va='center', color=tableau20[0], size=9)
+
+plt.plot([0, 1], [0, 1], "--", lw=0.5, color="black", alpha=0.3)  
+plt.xlabel("Popularity Fabio")
+plt.ylabel("Popularity in chat")
+plt.axis([0, max_x*1.1, 0, max_y*1.1])
+plt.xticks([])
+plt.yticks([])
+plt.savefig("_words_popularity.png", bbox_inches="tight")
 
 
 
 
+##### AMOUNT OF MESSAGES / AVERAGE SENTENCE LENGTH FOR SOME USERS #####
+usersToPlot = {}
+for (user, count) in wordCount:
+	if user not in userSentenceCount: continue
+	if userWordCountCopy[user] < 10: continue
+	usersToPlot[user] = {
+		'msgs': userWordCountCopy[user],
+		'sentcL': float(count) / userSentenceCount[user]
+	}
+
+plt.figure(figsize=(12, 12))
+max_x = 0
+max_y = 0
+for user, content in usersToPlot.iteritems():
+	plt.text(content['msgs'], content['sentcL'], user, ha='center', va='center', color=tableau20[0], size=12)
+	max_x = max(max_x, content['msgs'])
+	max_y = max(max_y, content['sentcL'])
+
+# plt.plot([0, max_x], [0, max_y], "--", lw=0.5, color="black", alpha=0.3)  
+plt.xlabel("Amount of messages")
+plt.ylabel("Average sentence length")
+plt.axis([0, max_x*1.1, 0, max_y*1.1])
+
+plt.savefig("_msgs_vs_sentence_length.png", bbox_inches="tight")
