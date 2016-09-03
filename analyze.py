@@ -1,11 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+import matplotlib.patches as mpatches
 import pandas as pd
 import re
+import json
+import copy
 from collections import OrderedDict
 from datetime import datetime
-
 
 
 # These are the "Tableau 20" colors as RGB.    
@@ -45,10 +47,12 @@ def countEmojis(text):
 def processText(text, user):
 	global totalWordCount
 
+
 	words = len(text.split(' '))
 	add(wordCount, user, words)
 	totalWordCount += words
 
+	# text = re.sub(r"(\.)+", ".", text)
 	sentences = len(text.split('. '))
 	add(userSentenceCount, user, sentences)
 
@@ -57,17 +61,18 @@ def processText(text, user):
 		if word == '': continue
 		add(singlewordCount, word)
 
-		if user == 'Fabio': add(userSinglewordCount, word)
-		# if user == 'Natalia Malyshewa': add(userSinglewordCount, word)
+		if not user in userSinglewordCount: userSinglewordCount[user] = {}
+		add(userSinglewordCount[user], word)
+		# if user == POPULARITY_USER: add(userSinglewordCount, word)
 
 	countBrackets(text)
 
 
 with open("_chat.txt") as f:
     content = f.readlines()
+    f.close()
 
-
-userWordCount = {}
+userMsgCount = {}
 userDateCount = {}
 userSentenceCount = {}
 dateCount = OrderedDict()
@@ -103,6 +108,7 @@ for line in content:
 
 	user = user.decode('unicode_escape').encode('ascii', 'ignore')
 	user = re.sub(' M$', '', user) # since Fabio uses ' M' in names
+	user = user.split()[0] # unicode problem
 	user = user.strip()
 
 
@@ -112,7 +118,7 @@ for line in content:
 
 	processText(text, user)
 	
-	add(userWordCount, user)
+	add(userMsgCount, user)
 	add(hourCount, hour)
 
 	add(userDateCount, (user, date))
@@ -125,18 +131,20 @@ for line in content:
 print ("total word count: " + str(totalWordCount))
 
 # sort by values
-userWordCountCopy = userWordCount
-userWordCount = sorted(userWordCount.iteritems(), key=lambda(k, v): (v, k), reverse=True)
+userMsgCountCopy = userMsgCount
+userMsgCount = sorted(userMsgCount.iteritems(), key=lambda(k, v): (v, k), reverse=True)
 wordCount = sorted(wordCount.iteritems(), key=lambda(k, v): (v, k), reverse=True)
 imageCount = sorted(imageCount.iteritems(), key=lambda(k, v): (v, k), reverse=True)
 openBracketsCount = sorted(openBracketsCount.iteritems(), key=lambda(k, v): (v, k), reverse=True)
 singlewordCount = sorted(singlewordCount.iteritems(), key=lambda(k, v): (v, k), reverse=True)
-userSinglewordCount = sorted(userSinglewordCount.iteritems(), key=lambda(k, v): (v, k), reverse=True)
+# userSinglewordCount = sorted(userSinglewordCount.iteritems(), key=lambda(k, v): (v, k), reverse=True)
+for user, w in userSinglewordCount.iteritems():
+	userSinglewordCount[user] = sorted(userSinglewordCount[user].iteritems(), key=lambda(k, v): (v, k), reverse=True)
 
 
 ##### NR OF MESSAGES #####
-users = [user for (user, count) in userWordCount if count > 0]
-counts = [count for (user, count) in userWordCount if count > 0]
+users = [user for (user, count) in userMsgCount if count > 0]
+counts = [count for (user, count) in userMsgCount if count > 0]
 
 freq_series = pd.Series.from_array(counts) 
 plt.figure(figsize=(12, 9))
@@ -146,9 +154,9 @@ ax.spines["top"].set_visible(False)
 ax.spines["right"].set_visible(False)    
 ax.get_xaxis().tick_bottom()  
 ax.get_yaxis().tick_left()
-ax.set_title("# of messages per user in Mensa chat")
-ax.set_xlabel("user")
-ax.set_ylabel("# of messages")
+ax.set_title("Amount of messages per user")
+ax.set_xlabel("User")
+ax.set_ylabel("Amount of messages")
 ax.set_xticklabels(users)
 
 plt.gcf().subplots_adjust(bottom=0.25)
@@ -156,8 +164,8 @@ plt.savefig("_nr_of_messages.png", bbox_inches="tight")
 
 
 ##### WORDS / MESSAGE #####
-users = [user for (user, count) in wordCount if userWordCountCopy[user] > 1]
-wordCount2 = [(user, count/userWordCountCopy[user]) for (user, count) in wordCount if userWordCountCopy[user] > 1]
+users = [user for (user, count) in wordCount if userMsgCountCopy[user] > 1]
+wordCount2 = [(user, count/userMsgCountCopy[user]) for (user, count) in wordCount if userMsgCountCopy[user] > 1]
 wordCount2 = sorted(wordCount2, key=lambda tup: tup[1], reverse=True)
 
 users = [user for (user, count) in wordCount2]
@@ -171,9 +179,9 @@ ax.spines["top"].set_visible(False)
 ax.spines["right"].set_visible(False)    
 ax.get_xaxis().tick_bottom()  
 ax.get_yaxis().tick_left()
-ax.set_title("Average # of words per message (emoji = 1 word)")
-ax.set_xlabel("user")
-ax.set_ylabel("# of words")
+ax.set_title("Average amount of words per message (emoji = 1 word)")
+ax.set_xlabel("User")
+ax.set_ylabel("Amount of words")
 ax.set_xticklabels(users)
 
 plt.gcf().subplots_adjust(bottom=0.25)
@@ -199,7 +207,7 @@ ax.get_xaxis().tick_bottom()
 ax.get_yaxis().tick_left()
 ax.set_title("Chat activity during the day")
 ax.set_xlabel("hour")
-ax.set_ylabel("# of messages")
+ax.set_ylabel("Amount of messages")
 ax.set_xticklabels(range(0, 24))
 
 plt.gcf().subplots_adjust(bottom=0.25)
@@ -219,13 +227,13 @@ y2 = []
 y3 = []
 y4 = []
 for date in dates:
-	if ('Natalia Malyshewa', date) in userDateCount: y2.append(userDateCount[('Natalia Malyshewa', date) ])
+	if ('Fabio', date) in userDateCount: y2.append(userDateCount[('Fabio', date) ])
 	else: y2.append(0)	
 
-	if ('Squeeeez', date) in userDateCount: y3.append(userDateCount[('Squeeeez', date) ])
+	if ('Anna', date) in userDateCount: y3.append(userDateCount[('Anna', date) ])
 	else: y3.append(0)
 
-	if ('Ritish', date) in userDateCount: y4.append(userDateCount[('Ritish', date) ])
+	if ('Efrem', date) in userDateCount: y4.append(userDateCount[('Efrem', date) ])
 	else: y4.append(0)	
 
 
@@ -240,25 +248,28 @@ ax.get_xaxis().tick_bottom()
 ax.get_yaxis().tick_left()
 ax.set_title("Chat activity per date (total and top users)")
 ax.set_xlabel("date")
-ax.set_ylabel("# of messages")
+ax.set_ylabel("Amount of messages")
 
+y = y2 # when Total is disabled
 for yy in range(min(y), max(y), 100):    
     plt.plot(x, [yy] * len(x), "--", lw=0.5, color="black", alpha=0.3)  
 
-plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%d.%m.'))
-plt.gca().xaxis.set_major_locator(mdates.DayLocator(interval=3))
+plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%d.%m.%y'))
+plt.gca().xaxis.set_major_locator(mdates.DayLocator(interval=50))
 plt.gcf().autofmt_xdate()
 
-plt.plot(x, y, color=tableau20[2], alpha=1)
-plt.text(max(x), y[-1], "Total", fontsize=10, color=tableau20[2])    
-plt.plot(x, y2, color=tableau20[5], alpha=1)
-plt.text(max(x), y2[-1], "Natalia", fontsize=10, color=tableau20[5])    
-plt.plot(x, y3, color=tableau20[6], alpha=1)
-plt.text(max(x), y3[-1], "Squeeeez", fontsize=10, color=tableau20[6])    
-plt.plot(x, y4, color=tableau20[8], alpha=1)
-plt.text(max(x), y4[-1], "Ritish", fontsize=10, color=tableau20[8])    
+ax = plt.gca()
+# plt.plot(x, y, color=tableau20[2], alpha=1, label="Total")
+# plt.text(max(x), y[-1], "Total", fontsize=10, color=tableau20[2])    
+ax.plot(x, y2, color=tableau20[5], alpha=1, label="Fabio")
+# plt.text(max(x), y2[-1], "Fabio", fontsize=10, color=tableau20[5])    
+ax.plot(x, y3, color=tableau20[6], alpha=1, label="Anna")
+# plt.text(max(x), y3[-1], "Anna", fontsize=10, color=tableau20[6])    
+ax.plot(x, y4, color=tableau20[8], alpha=1, label="Efrem")
+# plt.text(max(x), y4[-1], "Efrem", fontsize=10, color=tableau20[8])    
 
 plt.gcf().subplots_adjust(bottom=0.25)
+ax.legend(loc='upper left', shadow=True)
 plt.savefig("_activity_over_time.png", bbox_inches="tight")
 
 
@@ -276,8 +287,8 @@ ax.spines["right"].set_visible(False)
 ax.get_xaxis().tick_bottom()  
 ax.get_yaxis().tick_left()
 ax.set_title("Images shared")
-ax.set_xlabel("user")
-ax.set_ylabel("# of images")
+ax.set_xlabel("User")
+ax.set_ylabel("Amount of images")
 ax.set_xticklabels(users)
 
 plt.gcf().subplots_adjust(bottom=0.25)
@@ -303,8 +314,8 @@ ax.spines["right"].set_visible(False)
 ax.get_xaxis().tick_bottom()  
 ax.get_yaxis().tick_left()
 ax.set_title("Opening / closing brackets")
-ax.set_xlabel("user")
-ax.set_ylabel("# of brackets")
+ax.set_xlabel("User")
+ax.set_ylabel("Amount of brackets")
 ax.set_xticklabels(users)
 
 plt.gcf().subplots_adjust(bottom=0.25)
@@ -321,64 +332,152 @@ plt.savefig("_brackets.png", bbox_inches="tight")
 
 
 ##### WORD "CLOUD" PLOT #####
-wordCountThisUser = 0
-for user, count in wordCount:
-	if user == 'Fabio':
-	# if user == 'Natalia Malyshewa':
-		wordCountThisUser = count
-		break
-
-wordsToPlot = {}
+wordsToPlotOrg = {}
 max_y = 0
-for word, count in singlewordCount[:30]:
-	wordsToPlot[word] = {}
-	wordsToPlot[word]['y'] = float(count) / totalWordCount
-	wordsToPlot[word]['x'] = 0
+for word, count in singlewordCount[:20]:
+	wordsToPlotOrg[word] = {}
+	wordsToPlotOrg[word]['y'] = float(count) / totalWordCount
+	wordsToPlotOrg[word]['x'] = 0
 	max_y = max(max_y, float(count) / totalWordCount)
 
-max_x = 0
-for word, count in userSinglewordCount[:30]:
-	if word not in wordsToPlot:wordsToPlot[word] = {}
-	wordsToPlot[word]['x'] = float(count) / wordCountThisUser
-	max_x = max(max_x, float(count) / wordCountThisUser)
-	if 'y' not in wordsToPlot[word]: wordsToPlot[word]['y'] = 0
-
-plt.figure(figsize=(12, 12))
-for word, xy in wordsToPlot.iteritems():
-	plt.text(xy['x'], xy['y'], word, ha='center', va='center', color=tableau20[0], size=9)
-
-plt.plot([0, 1], [0, 1], "--", lw=0.5, color="black", alpha=0.3)  
-plt.xlabel("Popularity Fabio")
-plt.ylabel("Popularity in chat")
-plt.axis([0, max_x*1.1, 0, max_y*1.1])
-plt.xticks([])
-plt.yticks([])
-plt.savefig("_words_popularity.png", bbox_inches="tight")
 
 
+
+# handles = []
+for POPULARITY_USER in users:
+	plt.figure(figsize=(12, 12))
+	wordCountThisUser = 0
+	max_x = 0
+	wordsToPlot = {}
+	wordsToPlot = copy.deepcopy(wordsToPlotOrg)
+
+	# get word count for current user
+	for user, count in wordCount:
+		if user == POPULARITY_USER:
+			wordCountThisUser = count
+			break
+
+	# set coordinates 
+	for word, count in userSinglewordCount[POPULARITY_USER][:20]:
+		if word not in wordsToPlot: wordsToPlot[word] = {}
+		wordsToPlot[word]['x'] = float(count) / wordCountThisUser
+		max_x = max(max_x, float(count) / wordCountThisUser)
+		if 'y' not in wordsToPlot[word]: 
+			wordsToPlot[word]['y'] = 0
+			# print word
+
+	# plot
+	for word, xy in wordsToPlot.iteritems():
+		word = word.decode('unicode_escape').encode('ascii', 'ignore')
+		plt.text(xy['x'], xy['y'], word, ha='center', va='center', color=tableau20[0], size=10, label=POPULARITY_USER)
+
+	POPULARITY_USER = POPULARITY_USER.decode('utf-8')
+	# handles.append(mpatches.Patch(color=tableau20[color_i], label=POPULARITY_USER))
+
+	ax = plt.gca()
+	ax.set_title("Popularity (use) of words")
+	plt.plot([0, 1], [0, 1], "--", lw=0.5, color="black", alpha=0.3)  
+	plt.xlabel("Popularity " + POPULARITY_USER)
+	plt.ylabel("Popularity in chat")
+	plt.axis([0, max_x*1.05, 0, max_y*1.05])
+	plt.xticks([])
+	plt.yticks([])
+
+	# plt.legend(handles = handles, loc='upper left')
+	plt.savefig("_words_popularity_" + POPULARITY_USER + ".png", bbox_inches="tight")
+	# plt.savefig("_words_popularity.png", bbox_inches="tight")
+
+'''
+with open('_words_popularity_all_users.txt', 'w') as outfile:
+	json.dump(userSinglewordCount, outfile)
+	outfile.close()
+'''
 
 
 ##### AMOUNT OF MESSAGES / AVERAGE SENTENCE LENGTH FOR SOME USERS #####
 usersToPlot = {}
 for (user, count) in wordCount:
 	if user not in userSentenceCount: continue
-	if userWordCountCopy[user] < 10: continue
+	if userMsgCountCopy[user] < 10: continue
 	usersToPlot[user] = {
-		'msgs': userWordCountCopy[user],
+		'msgs': userMsgCountCopy[user],
 		'sentcL': float(count) / userSentenceCount[user]
 	}
 
 plt.figure(figsize=(12, 12))
 max_x = 0
 max_y = 0
+min_y = 999999999
+color_i = 0
 for user, content in usersToPlot.iteritems():
-	plt.text(content['msgs'], content['sentcL'], user, ha='center', va='center', color=tableau20[0], size=12)
+	plt.text(content['msgs'], content['sentcL'], user, ha='center', va='center', color=tableau20[color_i], size=12)
 	max_x = max(max_x, content['msgs'])
 	max_y = max(max_y, content['sentcL'])
+	min_y = min(min_y, content['sentcL'])
+	color_i += 1
+	if color_i == 20: color_i = 0 
 
 # plt.plot([0, max_x], [0, max_y], "--", lw=0.5, color="black", alpha=0.3)  
-plt.xlabel("Amount of messages")
-plt.ylabel("Average sentence length")
-plt.axis([0, max_x*1.1, 0, max_y*1.1])
+ax = plt.gca()
+ax.spines["top"].set_visible(False)    
+ax.spines["right"].set_visible(False)  
+ax.get_xaxis().tick_bottom()  
+ax.get_yaxis().tick_left()
 
+
+plt.xlabel("Amount of messages")
+plt.ylabel("Average amount of words / sentence")
+plt.axis([0, max_x*1.1, min_y*0.9, max_y*1.05])
 plt.savefig("_msgs_vs_sentence_length.png", bbox_inches="tight")
+
+
+
+##### AMOUNT OF "THE" / AVERAGE SENTENCE LENGTH FOR SOME USERS #####
+THE_WORD = 'and'
+usersToPlot = {}
+for (user, count) in wordCount:
+	if user not in userSinglewordCount: continue
+	if user not in userSentenceCount: continue
+	if userMsgCountCopy[user] < 20: continue
+
+	theCount = 0
+	for word, count2 in userSinglewordCount[user]:
+		if word == THE_WORD:
+			theCount = count2
+			break
+
+	usersToPlot[user] = {
+		'sentl': float(count) / userSentenceCount[user],
+		'amount': float(theCount) / count
+	}
+
+
+plt.figure(figsize=(12, 9))
+max_x = 0
+max_y = 0
+min_x = 99999999999
+min_y = 99999999999
+color_i = 0
+for user, content in usersToPlot.iteritems():
+	plt.text(content['sentl'], content['amount'], user, ha='center', va='center', color=tableau20[color_i], size=12)
+	max_x = max(max_x, content['sentl'])
+	max_y = max(max_y, content['amount'])
+	min_x = min(min_x, content['sentl'])
+	min_y = min(min_y, content['amount'])
+	color_i += 1
+	if color_i == 20: color_i = 0 
+
+# plt.plot([0, max_x], [0, max_y], "--", lw=0.5, color="black", alpha=0.3)  
+ax = plt.gca()
+ax.spines["top"].set_visible(False)    
+ax.spines["right"].set_visible(False)  
+ax.get_xaxis().tick_bottom()  
+ax.get_yaxis().tick_left()
+
+
+plt.xlabel("Average amount of words / sentence")
+plt.ylabel("Use of '"+THE_WORD+"'")
+plt.axis([min_x*0.9, max_x*1.1, min_y*0.9, max_y*1.05])
+plt.savefig("_sent_length_vs_word.png", bbox_inches="tight")
+
+
