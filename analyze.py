@@ -6,8 +6,9 @@ import pandas as pd
 import re
 import json
 import copy
+import sys
 from collections import OrderedDict
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 # These are the "Tableau 20" colors as RGB.    
@@ -84,8 +85,12 @@ hourCount = {}
 imageCount = {}
 closedBracketsCount = {}
 openBracketsCount = {}
+userTimedeltaSum = {}
 totalWordCount = 0
+
 user = None
+datetimeUserBefore = None
+userBefore = None
 for line in content:
 	parts = line.split(':', 4)
 
@@ -111,6 +116,17 @@ for line in content:
 	user = user.split()[0] # unicode problem
 	user = user.strip()
 
+	# timedelta stuff
+	if user != userBefore:
+		t = date.split('.')
+		dt = datetime(2000+int(t[2]), int(t[1]), int(t[0]), int(hour), int(minute), int(second))
+		if datetimeUserBefore is not None:
+			add(userTimedeltaSum, user, dt - datetimeUserBefore)
+
+		datetimeUserBefore = dt
+		
+
+	userBefore = user
 
 	if "<image omitted>\r\n" in text:
 		add(imageCount, user)
@@ -128,6 +144,8 @@ for line in content:
 
 
 
+
+
 print ("total word count: " + str(totalWordCount))
 
 # sort by values
@@ -140,6 +158,12 @@ singlewordCount = sorted(singlewordCount.iteritems(), key=lambda(k, v): (v, k), 
 # userSinglewordCount = sorted(userSinglewordCount.iteritems(), key=lambda(k, v): (v, k), reverse=True)
 for user, w in userSinglewordCount.iteritems():
 	userSinglewordCount[user] = sorted(userSinglewordCount[user].iteritems(), key=lambda(k, v): (v, k), reverse=True)
+
+for user, td in userTimedeltaSum.iteritems():
+	userTimedeltaSum[user] /= userMsgCountCopy[user]
+userTimedeltaSum = sorted(userTimedeltaSum.iteritems(), key=lambda(k, v): (v, k), reverse=False)
+
+
 
 
 ##### NR OF MESSAGES #####
@@ -161,6 +185,7 @@ ax.set_xticklabels(users)
 
 plt.gcf().subplots_adjust(bottom=0.25)
 plt.savefig("_nr_of_messages.png", bbox_inches="tight")
+plt.close()
 
 
 ##### WORDS / MESSAGE #####
@@ -186,7 +211,7 @@ ax.set_xticklabels(users)
 
 plt.gcf().subplots_adjust(bottom=0.25)
 plt.savefig("_nr_of_words_per_msg.png", bbox_inches="tight")
-
+plt.close()
 
 
 ##### ACTIVITY DURING THE DAY #####
@@ -212,14 +237,13 @@ ax.set_xticklabels(range(0, 24))
 
 plt.gcf().subplots_adjust(bottom=0.25)
 plt.savefig("_activity_per_hour.png", bbox_inches="tight")
-
+plt.close()
 
 
 ##### ACTIVITY OVER TIME #####
 dates = dateCount.keys()
 x = [datetime.strptime(d, '%d.%m.%y').date() for d in dates]
 y = dateCount.values()
-
 
 # add a user
 # TODO make this simpler
@@ -271,6 +295,7 @@ ax.plot(x, y4, color=tableau20[8], alpha=1, label="Efrem")
 plt.gcf().subplots_adjust(bottom=0.25)
 ax.legend(loc='upper left', shadow=True)
 plt.savefig("_activity_over_time.png", bbox_inches="tight")
+plt.close()
 
 
 
@@ -293,6 +318,7 @@ ax.set_xticklabels(users)
 
 plt.gcf().subplots_adjust(bottom=0.25)
 plt.savefig("_images_shared.png", bbox_inches="tight")
+plt.close()
 
 
 
@@ -320,7 +346,7 @@ ax.set_xticklabels(users)
 
 plt.gcf().subplots_adjust(bottom=0.25)
 plt.savefig("_brackets.png", bbox_inches="tight")
-
+plt.close()
 
 
 ##### WORDS #####
@@ -385,13 +411,14 @@ for POPULARITY_USER in users:
 
 	# plt.legend(handles = handles, loc='upper left')
 	plt.savefig("_words_popularity_" + POPULARITY_USER + ".png", bbox_inches="tight")
+	plt.close()
 	# plt.savefig("_words_popularity.png", bbox_inches="tight")
 
-'''
-with open('_words_popularity_all_users.txt', 'w') as outfile:
-	json.dump(userSinglewordCount, outfile)
-	outfile.close()
-'''
+
+#with open('_words_popularity_all_users.txt', 'w') as outfile:
+#	json.dump(userSinglewordCount, outfile)
+#	outfile.close()
+
 
 
 ##### AMOUNT OF MESSAGES / AVERAGE SENTENCE LENGTH FOR SOME USERS #####
@@ -429,6 +456,7 @@ plt.xlabel("Amount of messages")
 plt.ylabel("Average amount of words / sentence")
 plt.axis([0, max_x*1.1, min_y*0.9, max_y*1.05])
 plt.savefig("_msgs_vs_sentence_length.png", bbox_inches="tight")
+plt.close()
 
 
 
@@ -479,5 +507,31 @@ plt.xlabel("Average amount of words / sentence")
 plt.ylabel("Use of '"+THE_WORD+"'")
 plt.axis([min_x*0.9, max_x*1.1, min_y*0.9, max_y*1.05])
 plt.savefig("_sent_length_vs_word.png", bbox_inches="tight")
+plt.close()
+
+
+
+
+##### REACTION TIME / LATENCY BEFORE ANSWERING #####
+users = [user for (user, td) in userTimedeltaSum if userMsgCountCopy[user] > 10]# and td.seconds < 3600]
+times = [(td.seconds/60) for (user, td) in userTimedeltaSum if userMsgCountCopy[user] > 10]# and td.seconds < 3600]
+
+freq_series = pd.Series.from_array(times) 
+plt.figure(figsize=(12, 9))
+
+ax = freq_series.plot(kind='bar', color=tableau20[0], alpha=0.8)
+ax.spines["top"].set_visible(False)    
+ax.spines["right"].set_visible(False)    
+ax.get_xaxis().tick_bottom()  
+ax.get_yaxis().tick_left()
+ax.set_title("Average time difference to a precursory message of an other user")
+ax.set_xlabel("User")
+ax.set_ylabel("Time in minutes")
+ax.set_xticklabels(users)
+
+plt.gcf().subplots_adjust(bottom=0.25)
+plt.savefig("_reaction_time_of_user.png", bbox_inches="tight")
+plt.close()
+
 
 
