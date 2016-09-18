@@ -1,6 +1,6 @@
 # Plots for WhatsApp group chats
 
-'''Works for iPhone WhatsApp chats only so far'''
+**Works for iPhone WhatsApp chats only so far**
 
 ## Setup and install dependencies
 In a terminal do:
